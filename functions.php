@@ -45,7 +45,7 @@ function tcg_enqueue_assets() {
         'tcg-style',
         get_theme_file_uri( 'assets/css/style.css' ),
         [ 'outfit-font' ],
-        '1.3.6'
+        '1.3.7'
     );
 
     wp_enqueue_script(
