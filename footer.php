@@ -61,19 +61,19 @@
       <!-- Verein -->
       <div class="footer-col">
         <h4>Verein</h4>
-        <a href="#">Geschichte</a>
-        <a href="#">Vorstand</a>
-        <a href="#">Mitglied werden</a>
-        <a href="#">Kontakt</a>
+        <a href="/verein/">Geschichte</a>
+        <a href="/verein/vorstandschaft/">Vorstand</a>
+        <a href="/verein/mitglied-werden/">Mitglied werden</a>
+        <a href="/verein/mitgliedschaft/">Kontakt</a>
       </div>
 
       <!-- Tennis -->
       <div class="footer-col">
         <h4>Tennis</h4>
-        <a href="#">Mannschaften</a>
-        <a href="#">Training</a>
-        <a href="#">Jugend</a>
-        <a href="#">Platzbuchung</a>
+        <a href="/tennis/mannschaftssport/">Mannschaften</a>
+        <a href="/tennis/trainerteam/">Training</a>
+        <a href="/tennis/mannschaftssport/">Jugend</a>
+        <a href="https://tc-grubweg.ebusy.de/">Platzbuchung</a>
       </div>
 
       <!-- Kontakt -->
@@ -82,7 +82,7 @@
         <a href="#">Grubweg, Passau</a>
         <a href="mailto:info@tcg-passau.de">info@tcg-passau.de</a>
         <a href="<?php echo esc_url( get_privacy_policy_url() ); ?>">Datenschutz</a>
-        <a href="#">Impressum</a>
+        <a href="/impressum/">Impressum</a>
       </div>
 
     </div>
