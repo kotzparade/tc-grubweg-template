@@ -1,0 +1,10 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+DESIGN_ANALYSIS.md
+
+# Logs
+*.log
