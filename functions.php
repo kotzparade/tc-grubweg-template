@@ -6,6 +6,9 @@
 // ── SEITENSPEZIFISCHE MODULE ───────────────────────────────────────────────────
 require_once get_theme_file_path( 'inc/hero-meta.php' );
 require_once get_theme_file_path( 'inc/mitgliedschaft.php' );
+require_once get_theme_file_path( 'inc/ebusy-api.php' );   // eBuSy: Einstellungen + HTTP-Client
+require_once get_theme_file_path( 'inc/ebusy-cf7.php' );   // eBuSy: CF7-Anbindung Mitgliederantrag
+require_once get_theme_file_path( 'inc/ebusy-admin.php' ); // eBuSy: Einstellungsseite
 
 // ── THEME SETUP ────────────────────────────────────────────────────────────────
 
@@ -45,7 +48,7 @@ function tcg_enqueue_assets() {
         'tcg-style',
         get_theme_file_uri( 'assets/css/style.css' ),
         [ 'outfit-font' ],
-        '1.3.7'
+        '1.3.8'
     );
 
     wp_enqueue_script(

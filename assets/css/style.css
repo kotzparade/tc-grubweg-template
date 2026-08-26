@@ -2279,6 +2279,26 @@ footer {
 .tcg-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
 .tcg-form-grid .tcg-form-full { grid-column: 1 / -1; }
 
+/* Abschnitts-Trenner im Formular (z. B. „Bankverbindung") */
+.wpcf7-form .tcg-form-section {
+  margin: 10px 0 18px; padding-top: 22px;
+  border-top: 1px solid var(--border);
+}
+.wpcf7-form .tcg-form-section h3 {
+  margin: 0 0 4px;
+  font-size: 16px; font-weight: 700; color: var(--green-dark);
+}
+.wpcf7-form .tcg-form-section p {
+  margin: 0; font-size: 14px; color: var(--text-muted);
+}
+
+/* Hinweis-Kasten (z. B. SEPA-Mandatstext) */
+.wpcf7-form .tcg-form-note {
+  padding: 12px 14px;
+  background: var(--green-pale); border-radius: var(--radius);
+  font-size: 13.5px; line-height: 1.55; color: var(--text);
+}
+
 /* Mobil */
 @media (max-width: 768px) {
   .wpcf7-form { padding: 26px 22px; }
