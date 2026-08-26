@@ -212,11 +212,11 @@ HTML;
         </div>
         <span class="mb-docs-link-arrow" aria-hidden="true"></span>
       </a>
-      <a href="mailto:info@tcg-passau.de" class="mb-docs-link">
+      <a href="mailto:info@tc-grubweg.de" class="mb-docs-link">
         <div class="mb-docs-link-icon">{$svg_mail}</div>
         <div class="mb-docs-link-body">
           <div class="mb-docs-link-title">Fragen? Direkt schreiben</div>
-          <div class="mb-docs-link-meta">info@tcg-passau.de</div>
+          <div class="mb-docs-link-meta">info@tc-grubweg.de</div>
         </div>
         <span class="mb-docs-link-arrow" aria-hidden="true"></span>
       </a>

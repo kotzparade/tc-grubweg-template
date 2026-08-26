@@ -55,7 +55,7 @@
           ?>
           <span class="footer-logo-name"><?php bloginfo( 'name' ); ?></span>
         </div>
-        <p class="footer-desc">Ihr Tennisverein in Passau-Grubweg seit 1962. Sport, Gemeinschaft und Freude am Spiel — für Jung und Alt.</p>
+        <p class="footer-desc">Ihr Tennisverein in Passau-Grubweg seit 1977. Sport, Gemeinschaft und Freude am Spiel — für Jung und Alt.</p>
       </div>
 
       <!-- Verein -->
@@ -80,7 +80,7 @@
       <div class="footer-col">
         <h4>Kontakt</h4>
         <a href="#">Grubweg, Passau</a>
-        <a href="mailto:info@tcg-passau.de">info@tcg-passau.de</a>
+        <a href="mailto:info@tc-grubweg.de">info@tc-grubweg.de</a>
         <a href="<?php echo esc_url( get_privacy_policy_url() ); ?>">Datenschutz</a>
         <a href="/impressum/">Impressum</a>
       </div>

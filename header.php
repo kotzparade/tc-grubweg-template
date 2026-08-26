@@ -26,7 +26,7 @@
       <?php echo $logo_img; ?>
       <div class="nav-logo-text">
         <strong><?php bloginfo( 'name' ); ?></strong>
-        <span>e.V. · Gegründet 1962</span>
+        <span>e.V. · Gegründet 1977</span>
       </div>
     </a>
 
