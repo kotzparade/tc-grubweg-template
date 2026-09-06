@@ -155,6 +155,12 @@ function tcg_ebusy_build_person( array $data, array $settings, $mandate_referenc
         'contact'   => [
             'email' => $data['email'],
         ],
+        // eBuSy antwortet ohne „user"-Objekt mit HTTP 500 (Live-Test 06.09.2026), obwohl die Doku
+        // es nicht als Pflicht nennt. Konto bewusst deaktiviert: Zugang erst nach Bestätigung durch den Vorstand.
+        'user'      => [
+            'enabled' => false,
+            'level'   => 'USER',
+        ],
     ];
 
     switch ( $data['anrede'] ) {
