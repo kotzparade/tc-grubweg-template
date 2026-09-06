@@ -157,7 +157,7 @@ function tcg_ebusy_render_settings_page() {
     ?>
     <div class="wrap">
         <h1><?php esc_html_e( 'eBuSy-Schnittstelle', 'tc-grubweg' ); ?></h1>
-        <p><?php esc_html_e( 'Überträgt eingehende Mitgliedsanträge automatisch an eBuSy: Die Person wird angelegt und eine Mitgliedschaft mit dem Status „beantragt" erstellt. Der Vorstand bestätigt den Antrag anschließend in eBuSy.', 'tc-grubweg' ); ?></p>
+        <p><?php esc_html_e( 'Überträgt eingehende Mitgliedsanträge automatisch an eBuSy: Die Person wird mit Anschrift, Kontakt, Bankverbindung und SEPA-Mandat angelegt. Ist eine Modul-ID der Mitgliederverwaltung eingetragen, wird zusätzlich eine Mitgliedschaft mit dem Status „beantragt" erstellt. Ohne Modul-ID (kein Mitgliedermodul in eBuSy) stehen Beitragsmodell, Eintrittsdatum, Bemerkungen und Einwilligungen im Kommentar der Person.', 'tc-grubweg' ); ?></p>
         <p class="description">
             <?php
             printf(
@@ -169,6 +169,22 @@ function tcg_ebusy_render_settings_page() {
         </p>
 
         <?php settings_errors( 'tcg_ebusy' ); ?>
+
+        <div class="notice notice-info inline">
+            <p>
+                <strong><?php esc_html_e( 'Aktueller Modus:', 'tc-grubweg' ); ?></strong>
+                <?php
+                if ( $s['module_id'] ) {
+                    /* translators: %d = Modul-ID */
+                    printf( esc_html__( 'Person + Mitgliedschaft (Mitgliedermodul #%d).', 'tc-grubweg' ), (int) $s['module_id'] );
+                } else {
+                    esc_html_e( 'Nur Person anlegen – keine Modul-ID eingetragen, es wird keine Mitgliedschaft erstellt.', 'tc-grubweg' );
+                }
+                echo ' ';
+                echo $s['enabled'] ? esc_html__( 'Übertragung ist aktiv.', 'tc-grubweg' ) : esc_html__( 'Übertragung ist deaktiviert.', 'tc-grubweg' );
+                ?>
+            </p>
+        </div>
 
         <?php if ( ! $cf7_active ) : ?>
             <div class="notice notice-error"><p><?php esc_html_e( 'Contact Form 7 ist nicht aktiv – die Schnittstelle kann ohne das Plugin nicht arbeiten.', 'tc-grubweg' ); ?></p></div>
@@ -221,7 +237,7 @@ function tcg_ebusy_render_settings_page() {
                     <th scope="row"><label for="tcg_ebusy_module_id"><?php esc_html_e( 'Modul-ID Mitgliederverwaltung', 'tc-grubweg' ); ?></label></th>
                     <td>
                         <input type="number" min="0" id="tcg_ebusy_module_id" name="<?php echo esc_attr( TCG_EBUSY_OPTION ); ?>[module_id]" value="<?php echo esc_attr( $s['module_id'] ?: '' ); ?>" class="small-text">
-                        <p class="description"><?php esc_html_e( 'ID des eBuSy-Moduls vom Typ MEMBER – siehe „Verbindung testen" weiter unten.', 'tc-grubweg' ); ?></p>
+                        <p class="description"><?php esc_html_e( 'ID des eBuSy-Moduls vom Typ MEMBER – siehe „Verbindung testen" weiter unten. Leer lassen, wenn in eBuSy kein Mitgliedermodul gebucht ist: Dann wird nur die Person angelegt (Beitragsmodell, Eintrittsdatum, Bemerkungen und Einwilligungen im Personen-Kommentar, Bankverbindung und SEPA-Mandat bei der Person).', 'tc-grubweg' ); ?></p>
                     </td>
                 </tr>
                 <tr>
@@ -244,7 +260,7 @@ function tcg_ebusy_render_settings_page() {
                                 <?php endforeach; ?>
                                 </tbody>
                             </table>
-                            <p class="description"><?php esc_html_e( 'Ohne Zuordnung wird nur die Person angelegt und der Vorstand per Mail informiert.', 'tc-grubweg' ); ?></p>
+                            <p class="description"><?php esc_html_e( 'Nur relevant, wenn oben eine Modul-ID eingetragen ist. Fehlt dann die Zuordnung für ein Beitragsmodell, wird nur die Person angelegt und der Vorstand per Fehlermail informiert.', 'tc-grubweg' ); ?></p>
                         <?php endif; ?>
                     </td>
                 </tr>
@@ -254,7 +270,7 @@ function tcg_ebusy_render_settings_page() {
                         <label><?php esc_html_e( 'Ordinal', 'tc-grubweg' ); ?> <input type="number" min="0" name="<?php echo esc_attr( TCG_EBUSY_OPTION ); ?>[payment_type_ordinal]" value="<?php echo esc_attr( $s['payment_type_ordinal'] ); ?>" class="small-text"></label>
                         &nbsp;
                         <label><?php esc_html_e( 'Name', 'tc-grubweg' ); ?> <input type="text" name="<?php echo esc_attr( TCG_EBUSY_OPTION ); ?>[payment_type_name]" value="<?php echo esc_attr( $s['payment_type_name'] ); ?>" class="regular-text" placeholder="Lastschrift"></label>
-                        <p class="description"><?php esc_html_e( 'Zahlungsart der Mitgliedschaft (z. B. Lastschrift). Werte siehe „Verbindung testen". Leer = eBuSy-Standard.', 'tc-grubweg' ); ?></p>
+                        <p class="description"><?php esc_html_e( 'Nur mit Modul-ID relevant. Zahlungsart der Mitgliedschaft (z. B. Lastschrift). Werte siehe „Verbindung testen". Leer = eBuSy-Standard.', 'tc-grubweg' ); ?></p>
                     </td>
                 </tr>
                 <tr>
@@ -332,7 +348,16 @@ function tcg_ebusy_render_settings_page() {
  * Ergebnis des Verbindungstests: Module, Mitgliedschaftsarten, Zahlungsarten.
  */
 function tcg_ebusy_render_test_results( array $test, array $settings ) {
-    $modules = $test['modules'];
+    $modules    = $test['modules'];
+    $has_member = false;
+    if ( ! empty( $modules['ok'] ) ) {
+        foreach ( (array) $modules['data'] as $module ) {
+            if ( isset( $module['type'] ) && 'MEMBER' === $module['type'] ) {
+                $has_member = true;
+                break;
+            }
+        }
+    }
     ?>
     <div style="margin-top:16px">
     <?php if ( ! $modules['ok'] ) : ?>
@@ -356,9 +381,14 @@ function tcg_ebusy_render_test_results( array $test, array $settings ) {
             <?php endforeach; ?>
             </tbody>
         </table>
+        <?php if ( ! $has_member ) : ?>
+            <div class="notice notice-warning inline"><p><?php esc_html_e( 'Kein Modul vom Typ MEMBER gefunden – in eBuSy ist keine Mitgliederverwaltung gebucht. Modul-ID leer lassen: Anträge werden dann nur als Person angelegt.', 'tc-grubweg' ); ?></p></div>
+        <?php endif; ?>
 
         <h3><?php esc_html_e( 'Mitgliedschaftsarten', 'tc-grubweg' ); ?></h3>
-        <?php if ( ! $settings['module_id'] ) : ?>
+        <?php if ( ! $settings['module_id'] && ! $has_member ) : ?>
+            <p class="description"><?php esc_html_e( 'Entfällt – ohne Mitgliedermodul gibt es keine Mitgliedschaftsarten.', 'tc-grubweg' ); ?></p>
+        <?php elseif ( ! $settings['module_id'] ) : ?>
             <p class="description"><?php esc_html_e( 'Bitte zuerst die Modul-ID der Mitgliederverwaltung eintragen und speichern, dann erneut testen.', 'tc-grubweg' ); ?></p>
         <?php elseif ( empty( $test['types']['ok'] ) ) : ?>
             <div class="notice notice-error inline"><p><?php echo esc_html( isset( $test['types']['error'] ) ? $test['types']['error'] : '' ); ?></p></div>

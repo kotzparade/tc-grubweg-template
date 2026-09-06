@@ -88,6 +88,24 @@ function tcg_ebusy_target_form_id() {
 }
 
 /**
+ * Nutzdaten einer API-Antwort. Erfolgsantworten nutzen den Schlüssel „response"
+ * (wie dokumentiert), Fehlerantworten der Auth-Schicht „result". Kommt gar kein
+ * Wrapper (Liste oder Objekt ohne „error"-Schlüssel), ist die Antwort selbst die Nutzlast.
+ */
+function tcg_ebusy_payload( array $json ) {
+    if ( array_key_exists( 'response', $json ) ) {
+        return $json['response'];
+    }
+    if ( array_key_exists( 'result', $json ) ) {
+        return $json['result'];
+    }
+    if ( ! array_key_exists( 'error', $json ) && ! array_key_exists( 'message', $json ) ) {
+        return $json;
+    }
+    return null;
+}
+
+/**
  * Führt einen API-Aufruf aus.
  *
  * @param string     $method GET|POST|PUT|PATCH
@@ -167,14 +185,14 @@ function tcg_ebusy_request( $method, $path, $body = null ) {
         return [
             'ok'    => false,
             'error' => trim( $json['error'] . ( $message ? ': ' . $message : '' ) ),
-            'data'  => isset( $json['response'] ) ? $json['response'] : null,
+            'data'  => tcg_ebusy_payload( $json ),
         ];
     }
 
     return [
         'ok'    => true,
         'error' => '',
-        'data'  => isset( $json['response'] ) ? $json['response'] : null,
+        'data'  => tcg_ebusy_payload( $json ),
     ];
 }
 

@@ -282,7 +282,7 @@ function tcg_ebusy_collect_form_data( WPCF7_Submission $submission ) {
 }
 
 /**
- * Legt Person + Mitgliedschaft in eBuSy an und ergänzt $result.
+ * Legt die Person in eBuSy an, bei eingetragener Modul-ID zusätzlich die Mitgliedschaft, und ergänzt $result.
  */
 function tcg_ebusy_submit_application( array $data, array $settings, array $result ) {
     $person_response = tcg_ebusy_create_person( tcg_ebusy_build_person( $data, $settings, $result['mandate_reference'] ) );
@@ -299,14 +299,34 @@ function tcg_ebusy_submit_application( array $data, array $settings, array $resu
     $person_id           = isset( $person_response['data']['id'] ) ? (int) $person_response['data']['id'] : 0;
     $result['person_id'] = $person_id;
 
-    $module_id = (int) $settings['module_id'];
-    $type_key  = md5( $data['beitragsmodell'] );
-    $type_id   = isset( $settings['type_map'][ $type_key ] ) ? (int) $settings['type_map'][ $type_key ] : 0;
+    if ( ! $person_id ) {
+        $result['message'] = __( 'FEHLER: eBuSy hat die Person angenommen, aber keine Personen-ID zurückgegeben – bitte in eBuSy prüfen.', 'tc-grubweg' );
+        return $result;
+    }
 
-    if ( ! $module_id || ! $type_id ) {
+    $module_id = (int) $settings['module_id'];
+
+    // Ohne Modul-ID hat eBuSy keine Mitgliederverwaltung: Nur die Person anlegen, das zählt als Erfolg.
+    if ( ! $module_id ) {
+        $result['ok']      = true;
+        $result['message'] = sprintf(
+            /* translators: 1: Personen-ID, 2: Zusatz mit Mandatsreferenz, 3: Beitragsmodell */
+            __( 'Person #%1$d in eBuSy angelegt%2$s. Beitragsmodell „%3$s" und Einwilligungen stehen im Kommentar der Person; eine Mitgliedschaft wird ohne Mitgliedermodul nicht angelegt.', 'tc-grubweg' ),
+            $person_id,
+            /* translators: %s = Mandatsreferenz */
+            $result['mandate_reference'] ? sprintf( __( ' (SEPA-Mandat %s)', 'tc-grubweg' ), $result['mandate_reference'] ) : '',
+            $data['beitragsmodell']
+        );
+        return $result;
+    }
+
+    $type_key = md5( $data['beitragsmodell'] );
+    $type_id  = isset( $settings['type_map'][ $type_key ] ) ? (int) $settings['type_map'][ $type_key ] : 0;
+
+    if ( ! $type_id ) {
         $result['message'] = sprintf(
             /* translators: 1: Personen-ID, 2: Beitragsmodell */
-            __( 'Person #%1$d in eBuSy angelegt – Mitgliedschaft NICHT angelegt: für „%2$s" ist keine Mitgliedschaftsart bzw. kein Modul zugeordnet (Einstellungen → eBuSy-Schnittstelle). Bitte manuell nachtragen.', 'tc-grubweg' ),
+            __( 'Person #%1$d in eBuSy angelegt – Mitgliedschaft NICHT angelegt: für „%2$s" ist keine Mitgliedschaftsart zugeordnet (Einstellungen → eBuSy-Schnittstelle). Bitte manuell nachtragen.', 'tc-grubweg' ),
             $person_id,
             $data['beitragsmodell']
         );
