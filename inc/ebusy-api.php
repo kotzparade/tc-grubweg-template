@@ -26,7 +26,11 @@ function tcg_ebusy_default_settings() {
         'password'             => '',
         'form_id'              => 0,
         'module_id'            => 0,
-        'type_map'             => [], // md5(Beitragsmodell-Label) => Mitgliedschaftsart-ID
+        'membership_type_id'   => 0,  // eBuSy-Mitgliedschaftsart (bei TCG genau eine)
+        'membership_status'    => 'REQUESTED', // REQUESTED = Vorstand bestätigt in eBuSy | ACTIVE = sofort aktiv inkl. Beitragsart
+        'fee_map'              => [], // md5(Beitragsmodell-Label) => Beitragsart-ID (membershipFeeTypes)
+        'passive_map'          => [], // md5(Beitragsmodell-Label) => 1, wenn passive/ruhende Mitgliedschaft
+        'section_ids'          => [], // Abteilungs-IDs, die jeder Mitgliedschaft zugewiesen werden
         'payment_type_ordinal' => '',
         'payment_type_name'    => '',
         'notify_email'         => '',
@@ -208,6 +212,15 @@ function tcg_ebusy_create_membership( $module_id, array $membership ) {
     return tcg_ebusy_request( 'POST', 'member/modules/' . (int) $module_id . '/membership', $membership );
 }
 
+/**
+ * PATCH /member/modules/{module_id}/membership/{membership_id} → { id, name }
+ * Nötig für die Beitragsart: Beim POST ignoriert eBuSy „membershipFeeTypes" stillschweigend,
+ * per PATCH wird das Feld übernommen (Schreibtest 13.09.2026).
+ */
+function tcg_ebusy_update_membership( $module_id, $membership_id, array $patch ) {
+    return tcg_ebusy_request( 'PATCH', 'member/modules/' . (int) $module_id . '/membership/' . (int) $membership_id, $patch );
+}
+
 /** GET /general/modules → [ { id, name, displayName, type } ] */
 function tcg_ebusy_get_modules() {
     return tcg_ebusy_request( 'GET', 'general/modules' );
@@ -218,9 +231,58 @@ function tcg_ebusy_get_membership_types( $module_id ) {
     return tcg_ebusy_request( 'GET', 'member/modules/' . (int) $module_id . '/membership-types?offset=0&limit=100' );
 }
 
-/** GET /accounting/payment-types → [ { name, ordinal } ] */
+/** GET /member/modules/{module_id}/sections → Page { content: [ { id, name } ] } */
+function tcg_ebusy_get_sections( $module_id ) {
+    return tcg_ebusy_request( 'GET', 'member/modules/' . (int) $module_id . '/sections?offset=0&limit=100' );
+}
+
+/** GET /member/modules/{module_id}/memberships → Page { content: [ Mitgliedschaft ] } */
+function tcg_ebusy_get_memberships( $module_id, $offset = 0, $limit = 100 ) {
+    return tcg_ebusy_request( 'GET', 'member/modules/' . (int) $module_id . '/memberships?offset=' . (int) $offset . '&limit=' . (int) $limit );
+}
+
+/**
+ * Beitragsarten (membershipFeeTypes) sind in der API nicht dokumentiert und haben keinen
+ * Listen-Endpunkt. Als Hilfe für die Zuordnung werden sie aus den vorhandenen
+ * Mitgliedschaften gesammelt (max. 10 Seiten à 100). Beitragsarten ohne Mitglied
+ * fehlen hier – ihre ID steht im eBuSy-Backend.
+ *
+ * @return array { ok: bool, error: string, data: [ id => name ] }
+ */
+function tcg_ebusy_collect_fee_types( $module_id ) {
+    $found  = [];
+    $offset = 0;
+
+    for ( $page = 0; $page < 10; $page++ ) {
+        $r = tcg_ebusy_get_memberships( $module_id, $offset, 100 );
+        if ( ! $r['ok'] ) {
+            return [ 'ok' => false, 'error' => $r['error'], 'data' => $found ];
+        }
+        $content = isset( $r['data']['content'] ) ? (array) $r['data']['content'] : [];
+        foreach ( $content as $membership ) {
+            foreach ( (array) ( $membership['membershipFeeTypes'] ?? [] ) as $fee ) {
+                if ( isset( $fee['id'] ) ) {
+                    $found[ (int) $fee['id'] ] = isset( $fee['name'] ) ? (string) $fee['name'] : '';
+                }
+            }
+        }
+        if ( ! empty( $r['data']['last'] ) || ! $content ) {
+            break;
+        }
+        $offset += 100;
+    }
+
+    ksort( $found );
+    return [ 'ok' => true, 'error' => '', 'data' => $found ];
+}
+
+/** GET /accounting/payment-types → [ { name, ordinal } ] (eBuSy liefert { paymentTypes: [...] }) */
 function tcg_ebusy_get_payment_types() {
-    return tcg_ebusy_request( 'GET', 'accounting/payment-types' );
+    $r = tcg_ebusy_request( 'GET', 'accounting/payment-types' );
+    if ( $r['ok'] && isset( $r['data']['paymentTypes'] ) && is_array( $r['data']['paymentTypes'] ) ) {
+        $r['data'] = $r['data']['paymentTypes'];
+    }
+    return $r;
 }
 
 // ── Protokoll ──────────────────────────────────────────────────────────────────

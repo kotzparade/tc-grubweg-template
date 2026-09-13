@@ -6,7 +6,15 @@
  *   1. IBAN normalisieren/prüfen (bereits bei der Validierung)
  *   2. SEPA-Mandatsreferenz erzeugen (immer, auch ohne API)
  *   3. Person in eBuSy anlegen (POST /general/person)
- *   4. Mitgliedschaft mit Status REQUESTED anlegen (POST /member/modules/{id}/membership)
+ *   4. Mitgliedschaft anlegen (POST /member/modules/{id}/membership): feste Mitgliedschaftsart
+ *      (bei TCG genau eine), ruhende Mitgliedschaft als passiv (consideredActive=false),
+ *      Abteilung(en), Zahlungsart, Status laut Einstellung (REQUESTED oder ACTIVE)
+ *   4b. Nur bei Status ACTIVE: Beitragsart nachtragen (PATCH …/membership/{id} mit
+ *      membershipFeeTypes als ID-Liste). Befund Schreibtests 13.09.2026: Das Feld ist in der
+ *      eBuSy-Doku nicht aufgeführt, wird beim POST ignoriert und nur per PATCH übernommen –
+ *      und nur bei ACTIVE gespeichert; bei REQUESTED/DECLINED löscht eBuSy es wieder. Bei
+ *      „beantragt" steht die Beitragsart deshalb im Kommentar der Mitgliedschaft, der Vorstand
+ *      setzt sie beim Bestätigen in eBuSy.
  *   5. Ergebnis für Mail-Tags [_ebusy_status] / [_ebusy_mandatsreferenz] und Flamingo bereithalten
  *
  * Ein Fehler bei eBuSy bricht den Antrag NICHT ab – Mail und Flamingo sichern die Daten,
@@ -231,16 +239,44 @@ function tcg_ebusy_build_person( array $data, array $settings, $mandate_referenc
 }
 
 /**
- * Baut den Mitgliedschaftsdeskriptor.
+ * Schlüssel eines Beitragsmodell-Labels in fee_map / passive_map.
  */
-function tcg_ebusy_build_membership( array $data, array $settings, $person_id, $type_id ) {
+function tcg_ebusy_tier_key( $label ) {
+    return md5( (string) $label );
+}
+
+/**
+ * Baut den Mitgliedschaftsdeskriptor.
+ *
+ * @param int $fee_type_id eBuSy-Beitragsart (membershipFeeTypes) für das gewählte Beitragsmodell
+ */
+function tcg_ebusy_build_membership( array $data, array $settings, $person_id, $fee_type_id ) {
+    $tier_key   = tcg_ebusy_tier_key( $data['beitragsmodell'] );
+    $is_passive = ! empty( $settings['passive_map'][ $tier_key ] );
+    $status     = 'ACTIVE' === $settings['membership_status'] ? 'ACTIVE' : 'REQUESTED';
+
+    $comment = sprintf( 'Online-Antrag: %1$s → Beitragsart-ID %2$d%3$s', $data['beitragsmodell'], $fee_type_id, $is_passive ? ' (passiv)' : '' );
+    if ( 'REQUESTED' === $status ) {
+        $comment .= ' – Beitragsart bitte beim Bestätigen zuweisen (eBuSy speichert sie erst bei aktiver Mitgliedschaft).';
+    }
+    if ( '' !== $data['bemerkungen'] ) {
+        $comment .= "\n" . $data['bemerkungen'];
+    }
+
     $membership = [
-        'personId'         => (int) $person_id,
-        'membershipTypeId' => (int) $type_id,
-        'begin'            => $data['eintritt'] ? $data['eintritt'] : wp_date( 'Y-m-d' ),
-        'status'           => 'REQUESTED',
-        'comment'          => trim( 'Online-Antrag: ' . $data['beitragsmodell'] . ( '' !== $data['bemerkungen'] ? "\n" . $data['bemerkungen'] : '' ) ),
+        'personId'           => (int) $person_id,
+        'membershipTypeId'   => (int) $settings['membership_type_id'],
+        'membershipFeeTypes' => [ (int) $fee_type_id ], // wird beim POST ignoriert, siehe Kopfkommentar; bleibt für den Fall, dass eBuSy das nachbessert
+        'begin'              => $data['eintritt'] ? $data['eintritt'] : wp_date( 'Y-m-d' ),
+        'status'             => $status,
+        'consideredActive'   => ! $is_passive,
+        'comment'            => $comment,
     ];
+
+    $sections = array_values( array_filter( array_map( 'intval', (array) $settings['section_ids'] ) ) );
+    if ( $sections ) {
+        $membership['sections'] = $sections;
+    }
 
     if ( '' !== (string) $settings['payment_type_ordinal'] ) {
         $membership['paymentType'] = [ 'ordinal' => (int) $settings['payment_type_ordinal'] ];
@@ -326,23 +362,30 @@ function tcg_ebusy_submit_application( array $data, array $settings, array $resu
         return $result;
     }
 
-    $type_key = md5( $data['beitragsmodell'] );
-    $type_id  = isset( $settings['type_map'][ $type_key ] ) ? (int) $settings['type_map'][ $type_key ] : 0;
+    if ( ! (int) $settings['membership_type_id'] ) {
+        $result['message'] = sprintf(
+            /* translators: %d = Personen-ID */
+            __( 'Person #%d in eBuSy angelegt – Mitgliedschaft NICHT angelegt: keine Mitgliedschaftsart-ID eingetragen (Einstellungen → eBuSy-Schnittstelle). Bitte manuell nachtragen.', 'tc-grubweg' ),
+            $person_id
+        );
+        return $result;
+    }
 
-    if ( ! $type_id ) {
+    $tier_key    = tcg_ebusy_tier_key( $data['beitragsmodell'] );
+    $fee_type_id = isset( $settings['fee_map'][ $tier_key ] ) ? (int) $settings['fee_map'][ $tier_key ] : 0;
+
+    if ( ! $fee_type_id ) {
         $result['message'] = sprintf(
             /* translators: 1: Personen-ID, 2: Beitragsmodell */
-            __( 'Person #%1$d in eBuSy angelegt – Mitgliedschaft NICHT angelegt: für „%2$s" ist keine Mitgliedschaftsart zugeordnet (Einstellungen → eBuSy-Schnittstelle). Bitte manuell nachtragen.', 'tc-grubweg' ),
+            __( 'Person #%1$d in eBuSy angelegt – Mitgliedschaft NICHT angelegt: für „%2$s" ist keine Beitragsart zugeordnet (Einstellungen → eBuSy-Schnittstelle). Bitte manuell nachtragen.', 'tc-grubweg' ),
             $person_id,
             $data['beitragsmodell']
         );
         return $result;
     }
 
-    $membership_response = tcg_ebusy_create_membership(
-        $module_id,
-        tcg_ebusy_build_membership( $data, $settings, $person_id, $type_id )
-    );
+    $membership          = tcg_ebusy_build_membership( $data, $settings, $person_id, $fee_type_id );
+    $membership_response = tcg_ebusy_create_membership( $module_id, $membership );
 
     if ( ! $membership_response['ok'] ) {
         $result['message'] = sprintf(
@@ -355,14 +398,55 @@ function tcg_ebusy_submit_application( array $data, array $settings, array $resu
     }
 
     $result['membership_id'] = isset( $membership_response['data']['id'] ) ? (int) $membership_response['data']['id'] : 0;
-    $result['ok']            = true;
-    $result['message']       = sprintf(
-        /* translators: 1: Personen-ID, 2: Mitgliedschafts-ID, 3: Mandatsreferenz */
-        __( 'Person #%1$d angelegt, Mitgliedschaft #%2$d beantragt (SEPA-Mandat %3$s).', 'tc-grubweg' ),
-        $person_id,
-        $result['membership_id'],
-        $result['mandate_reference']
-    );
+
+    // Beitragsart nachtragen – nur bei ACTIVE möglich: eBuSy ignoriert membershipFeeTypes beim
+    // Anlegen, übernimmt es per PATCH und speichert es nur für aktive Mitgliedschaften. Status und
+    // Aktiv-Kennzeichen mitschicken, sonst fällt der Status beim PATCH auf ACTIVE (Schreibtests 13.09.2026).
+    if ( $result['membership_id'] && 'ACTIVE' === $membership['status'] ) {
+        $fee_response = tcg_ebusy_update_membership(
+            $module_id,
+            $result['membership_id'],
+            [
+                'membershipFeeTypes' => [ (int) $fee_type_id ],
+                'status'             => 'ACTIVE',
+                'consideredActive'   => $membership['consideredActive'],
+            ]
+        );
+        if ( ! $fee_response['ok'] ) {
+            $result['message'] = sprintf(
+                /* translators: 1: Personen-ID, 2: Mitgliedschafts-ID, 3: Beitragsmodell, 4: Fehlermeldung */
+                __( 'Person #%1$d angelegt, Mitgliedschaft #%2$d aktiv, aber die Beitragsart für „%3$s" konnte nicht gesetzt werden: %4$s – bitte in eBuSy nachtragen.', 'tc-grubweg' ),
+                $person_id,
+                $result['membership_id'],
+                $data['beitragsmodell'],
+                $fee_response['error']
+            );
+            return $result;
+        }
+    }
+
+    $result['ok'] = true;
+    if ( 'ACTIVE' === $membership['status'] ) {
+        $result['message'] = sprintf(
+            /* translators: 1: Personen-ID, 2: Mitgliedschafts-ID, 3: Beitragsmodell, 4: Beitragsart-ID, 5: Mandatsreferenz */
+            __( 'Person #%1$d angelegt, Mitgliedschaft #%2$d aktiv („%3$s" → Beitragsart %4$d, SEPA-Mandat %5$s).', 'tc-grubweg' ),
+            $person_id,
+            $result['membership_id'],
+            $data['beitragsmodell'],
+            $fee_type_id,
+            $result['mandate_reference']
+        );
+    } else {
+        $result['message'] = sprintf(
+            /* translators: 1: Personen-ID, 2: Mitgliedschafts-ID, 3: Beitragsmodell, 4: Beitragsart-ID, 5: Mandatsreferenz */
+            __( 'Person #%1$d angelegt, Mitgliedschaft #%2$d beantragt („%3$s" → Beitragsart %4$d, steht im Kommentar; beim Bestätigen in eBuSy zuweisen. SEPA-Mandat %5$s).', 'tc-grubweg' ),
+            $person_id,
+            $result['membership_id'],
+            $data['beitragsmodell'],
+            $fee_type_id,
+            $result['mandate_reference']
+        );
+    }
 
     return $result;
 }
