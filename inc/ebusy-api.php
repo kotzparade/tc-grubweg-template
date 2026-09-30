@@ -27,8 +27,9 @@ function tcg_ebusy_default_settings() {
         'form_id'              => 0,
         'module_id'            => 0,
         'membership_type_id'   => 0,  // eBuSy-Mitgliedschaftsart (bei TCG genau eine)
-        'membership_status'    => 'REQUESTED', // REQUESTED = Vorstand bestätigt in eBuSy | ACTIVE = sofort aktiv inkl. Beitragsart
-        'fee_map'              => [], // md5(Beitragsmodell-Label) => Beitragsart-ID (membershipFeeTypes)
+        'membership_status'    => 'REQUESTED', // REQUESTED = Vorstand bestätigt in eBuSy | ACTIVE = sofort aktiv
+        'fee_attribute_id'     => 0,  // Personen-Attribut „Beiträge" – daraus vergibt eBuSy Gruppe + Beitragsart
+        'attr_map'             => [], // md5(Beitragsmodell-Label) => Attributwert-ID von „Beiträge"
         'passive_map'          => [], // md5(Beitragsmodell-Label) => 1, wenn passive/ruhende Mitgliedschaft
         'section_ids'          => [], // Abteilungs-IDs, die jeder Mitgliedschaft zugewiesen werden
         'payment_type_ordinal' => '',
@@ -214,11 +215,37 @@ function tcg_ebusy_create_membership( $module_id, array $membership ) {
 
 /**
  * PATCH /member/modules/{module_id}/membership/{membership_id} → { id, name }
- * Nötig für die Beitragsart: Beim POST ignoriert eBuSy „membershipFeeTypes" stillschweigend,
- * per PATCH wird das Feld übernommen (Schreibtest 13.09.2026).
+ * Hinweis: „membershipFeeTypes" und „paymentType" ignoriert eBuSy hier (Tests 30.09.2026) – die
+ * Beitragsart ergibt sich aus Gruppenregeln, siehe tcg_ebusy_set_attributes().
  */
 function tcg_ebusy_update_membership( $module_id, $membership_id, array $patch ) {
     return tcg_ebusy_request( 'PATCH', 'member/modules/' . (int) $module_id . '/membership/' . (int) $membership_id, $patch );
+}
+
+/**
+ * POST /general/person/{person_id}/set-attributes
+ *
+ * Beitragsarten weist eBuSy über Gruppen „MGV – …" zu, deren Regeln auf aktive Mitgliedschaft,
+ * Alter am 1.1. und das Personen-Attribut „Beiträge" schauen. Das Attribut ist damit der einzige
+ * Weg, die Beitragsart per API zu steuern.
+ *
+ * @param array $attributes [ Attribut-ID => Attributwert-ID ]
+ */
+function tcg_ebusy_set_attributes( $person_id, array $attributes ) {
+    $body = [];
+    foreach ( $attributes as $attribute_id => $value_id ) {
+        $body[ (string) (int) $attribute_id ] = (string) (int) $value_id;
+    }
+    return tcg_ebusy_request( 'POST', 'general/person/' . (int) $person_id . '/set-attributes', [ 'attributes' => $body ] );
+}
+
+/** GET /general/attributes → [ { id, name, description, values: [ { id, name } ] } ] (eBuSy liefert { attributes: [...] }) */
+function tcg_ebusy_get_attributes() {
+    $r = tcg_ebusy_request( 'GET', 'general/attributes' );
+    if ( $r['ok'] && isset( $r['data']['attributes'] ) && is_array( $r['data']['attributes'] ) ) {
+        $r['data'] = $r['data']['attributes'];
+    }
+    return $r;
 }
 
 /** GET /general/modules → [ { id, name, displayName, type } ] */

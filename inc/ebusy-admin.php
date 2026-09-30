@@ -3,7 +3,7 @@
  * eBuSy-Schnittstelle: Einstellungsseite unter Einstellungen → eBuSy-Schnittstelle.
  *
  * Pflegbar ohne Code-Kenntnisse: Zugangsdaten, Formular, Modul-ID, Mitgliedschaftsart,
- * Zuordnung der Beitragsmodelle zu eBuSy-Beitragsarten, Abteilungen, Zahlungsart, Benachrichtigung.
+ * Zuordnung der Beitragsmodelle zum Attribut „Beiträge", Abteilungen, Zahlungsart, Benachrichtigung.
  * „Verbindung testen" listet Module, Mitgliedschaftsarten, Beitragsarten (aus vorhandenen
  * Mitgliedschaften), Abteilungen und Zahlungsarten mit IDs.
  */
@@ -62,12 +62,14 @@ function tcg_ebusy_sanitize_settings( $input ) {
     $clean['membership_type_id'] = isset( $input['membership_type_id'] ) ? absint( $input['membership_type_id'] ) : 0;
     $clean['membership_status']  = ( isset( $input['membership_status'] ) && 'ACTIVE' === $input['membership_status'] ) ? 'ACTIVE' : 'REQUESTED';
 
-    $clean['fee_map'] = [];
-    if ( ! empty( $input['fee_map'] ) && is_array( $input['fee_map'] ) ) {
-        foreach ( $input['fee_map'] as $key => $id ) {
+    $clean['fee_attribute_id'] = isset( $input['fee_attribute_id'] ) ? absint( $input['fee_attribute_id'] ) : 0;
+
+    $clean['attr_map'] = [];
+    if ( ! empty( $input['attr_map'] ) && is_array( $input['attr_map'] ) ) {
+        foreach ( $input['attr_map'] as $key => $id ) {
             $id = absint( $id );
             if ( preg_match( '/^[a-f0-9]{32}$/', (string) $key ) && $id > 0 ) {
-                $clean['fee_map'][ $key ] = $id;
+                $clean['attr_map'][ $key ] = $id;
             }
         }
     }
@@ -129,6 +131,7 @@ function tcg_ebusy_handle_test() {
         'fee_types'     => null,
         'sections'      => null,
         'payment_types' => tcg_ebusy_get_payment_types(),
+        'attributes'    => tcg_ebusy_get_attributes(),
     ];
 
     if ( $settings['module_id'] ) {
@@ -184,7 +187,7 @@ function tcg_ebusy_render_settings_page() {
     ?>
     <div class="wrap">
         <h1><?php esc_html_e( 'eBuSy-Schnittstelle', 'tc-grubweg' ); ?></h1>
-        <p><?php esc_html_e( 'Überträgt eingehende Mitgliedsanträge automatisch an eBuSy: Die Person wird mit Anschrift, Kontakt, Bankverbindung und SEPA-Mandat angelegt. Ist eine Modul-ID der Mitgliederverwaltung eingetragen, wird zusätzlich eine Mitgliedschaft erstellt (Status „beantragt" oder „aktiv", siehe unten) – mit der eingetragenen Mitgliedschaftsart, Abteilung(en), Zahlungsart und dem Beitragsmodell als Beitragsart. Beitragsmodell, Eintrittsdatum, Bemerkungen und Einwilligungen stehen zusätzlich im Kommentar der Person.', 'tc-grubweg' ); ?></p>
+        <p><?php esc_html_e( 'Überträgt eingehende Mitgliedsanträge automatisch an eBuSy: Die Person wird mit Anschrift, Kontakt, Bankverbindung und SEPA-Mandat angelegt. Ist eine Modul-ID der Mitgliederverwaltung eingetragen, wird zusätzlich eine Mitgliedschaft erstellt (Status „beantragt" oder „aktiv", siehe unten) – mit der eingetragenen Mitgliedschaftsart, Abteilung(en) und Zahlungsart; das Beitragsmodell wird als Personen-Attribut „Beiträge" gesetzt, daraus ergibt sich in eBuSy die Beitragsart. Beitragsmodell, Eintrittsdatum, Bemerkungen und Einwilligungen stehen zusätzlich im Kommentar der Person.', 'tc-grubweg' ); ?></p>
         <p class="description">
             <?php
             printf(
@@ -279,34 +282,39 @@ function tcg_ebusy_render_settings_page() {
                     <td>
                         <select id="tcg_ebusy_membership_status" name="<?php echo esc_attr( TCG_EBUSY_OPTION ); ?>[membership_status]">
                             <option value="REQUESTED" <?php selected( $s['membership_status'], 'REQUESTED' ); ?>><?php esc_html_e( 'beantragt – Vorstand bestätigt in eBuSy (empfohlen)', 'tc-grubweg' ); ?></option>
-                            <option value="ACTIVE" <?php selected( $s['membership_status'], 'ACTIVE' ); ?>><?php esc_html_e( 'aktiv – sofort mit Beitragsart, ohne Bestätigung', 'tc-grubweg' ); ?></option>
+                            <option value="ACTIVE" <?php selected( $s['membership_status'], 'ACTIVE' ); ?>><?php esc_html_e( 'aktiv – sofort, ohne Bestätigung', 'tc-grubweg' ); ?></option>
                         </select>
-                        <p class="description"><?php esc_html_e( 'eBuSy speichert die Beitragsart nur bei aktiven Mitgliedschaften. Bei „beantragt" steht sie im Kommentar der Mitgliedschaft und wird vom Vorstand beim Bestätigen in eBuSy zugewiesen. Bei „aktiv" wird sie sofort gesetzt – das Mitglied ist dann ohne Prüfung aktiv.', 'tc-grubweg' ); ?></p>
+                        <p class="description"><?php esc_html_e( 'Die Beitragsart vergibt eBuSy automatisch aus dem Attribut „Beiträge" (siehe unten), sobald die Mitgliedschaft aktiv ist. Bei „beantragt" genügt es also, den Antrag in eBuSy zu bestätigen. Bei „aktiv" gilt die Beitragsart sofort – das Mitglied ist dann ohne Prüfung aktiv.', 'tc-grubweg' ); ?></p>
                     </td>
                 </tr>
                 <tr>
-                    <th scope="row"><?php esc_html_e( 'Beitragsmodell → Beitragsart', 'tc-grubweg' ); ?></th>
+                    <th scope="row"><?php esc_html_e( 'Beitragsmodell → Attribut „Beiträge"', 'tc-grubweg' ); ?></th>
                     <td>
+                        <p style="margin-top:0">
+                            <label><?php esc_html_e( 'Attribut-ID „Beiträge"', 'tc-grubweg' ); ?>
+                                <input type="number" min="0" name="<?php echo esc_attr( TCG_EBUSY_OPTION ); ?>[fee_attribute_id]" value="<?php echo esc_attr( $s['fee_attribute_id'] ?: '' ); ?>" class="small-text" placeholder="9309">
+                            </label>
+                        </p>
                         <?php if ( ! $tiers ) : ?>
                             <p class="description"><?php esc_html_e( 'Im gewählten Formular wurde kein Radio-Feld „beitragsmodell" gefunden. Formular wählen, speichern – dann erscheinen hier die Optionen.', 'tc-grubweg' ); ?></p>
                         <?php else : ?>
                             <table class="widefat striped" style="max-width:720px">
-                                <thead><tr><th><?php esc_html_e( 'Option im Formular', 'tc-grubweg' ); ?></th><th style="width:140px"><?php esc_html_e( 'Beitragsart-ID', 'tc-grubweg' ); ?></th><th style="width:120px"><?php esc_html_e( 'Passiv/ruhend', 'tc-grubweg' ); ?></th></tr></thead>
+                                <thead><tr><th><?php esc_html_e( 'Option im Formular', 'tc-grubweg' ); ?></th><th style="width:140px"><?php esc_html_e( 'Attributwert-ID', 'tc-grubweg' ); ?></th><th style="width:120px"><?php esc_html_e( 'Passiv/ruhend', 'tc-grubweg' ); ?></th></tr></thead>
                                 <tbody>
                                 <?php foreach ( $tiers as $label ) :
                                     $key     = tcg_ebusy_tier_key( $label );
-                                    $val     = isset( $s['fee_map'][ $key ] ) ? (int) $s['fee_map'][ $key ] : 0;
+                                    $val     = isset( $s['attr_map'][ $key ] ) ? (int) $s['attr_map'][ $key ] : 0;
                                     $passive = ! empty( $s['passive_map'][ $key ] );
                                     ?>
                                     <tr>
                                         <td><?php echo esc_html( $label ); ?><?php if ( ! $val ) : ?> <span style="color:#b32d2e;font-weight:600"><?php esc_html_e( '– nicht zugeordnet', 'tc-grubweg' ); ?></span><?php endif; ?></td>
-                                        <td><input type="number" min="0" name="<?php echo esc_attr( TCG_EBUSY_OPTION ); ?>[fee_map][<?php echo esc_attr( $key ); ?>]" value="<?php echo esc_attr( $val ?: '' ); ?>" class="small-text"></td>
+                                        <td><input type="number" min="0" name="<?php echo esc_attr( TCG_EBUSY_OPTION ); ?>[attr_map][<?php echo esc_attr( $key ); ?>]" value="<?php echo esc_attr( $val ?: '' ); ?>" class="small-text"></td>
                                         <td><label><input type="checkbox" name="<?php echo esc_attr( TCG_EBUSY_OPTION ); ?>[passive_map][<?php echo esc_attr( $key ); ?>]" value="1" <?php checked( $passive ); ?>> <?php esc_html_e( 'passiv', 'tc-grubweg' ); ?></label></td>
                                     </tr>
                                 <?php endforeach; ?>
                                 </tbody>
                             </table>
-                            <p class="description"><?php esc_html_e( 'Beitragsarten heißen in eBuSy „Mitgliedsbeiträge" (Mitgliederverwaltung → Einstellungen). Die IDs zeigt „Verbindung testen" für alle Beitragsarten, die bereits bei einem Mitglied verwendet werden; andere stehen im eBuSy-Backend. Die Zuordnung landet bei Status „beantragt" im Kommentar der Mitgliedschaft, bei Status „aktiv" direkt als Beitragsart. „Passiv" setzt die Mitgliedschaft auf passiv/ruhend (z. B. ruhende Mitgliedschaft). Fehlt die Zuordnung für ein Beitragsmodell, wird nur die Person angelegt und der Vorstand per Fehlermail informiert.', 'tc-grubweg' ); ?></p>
+                            <p class="description"><?php esc_html_e( 'eBuSy vergibt die Beitragsart nicht direkt, sondern über Gruppen „MGV – …" (Beitragszuweisung), deren Regeln auf aktive Mitgliedschaft, Alter und das Personen-Attribut „Beiträge" schauen. Das Theme setzt deshalb bei jedem Antrag diesen Attributwert. Attribut- und Wert-IDs zeigt „Verbindung testen". „Passiv" setzt die Mitgliedschaft auf passiv/ruhend. Fehlt die Zuordnung für ein Beitragsmodell, wird der Antrag trotzdem angelegt und der Vorstand per Fehlermail gebeten, das Attribut in eBuSy zu setzen.', 'tc-grubweg' ); ?></p>
                         <?php endif; ?>
                     </td>
                 </tr>
@@ -350,7 +358,7 @@ function tcg_ebusy_render_settings_page() {
         <hr>
 
         <h2><?php esc_html_e( 'Verbindung testen', 'tc-grubweg' ); ?></h2>
-        <p><?php esc_html_e( 'Prüft die Zugangsdaten und listet Module, Mitgliedschaftsarten, Beitragsarten, Abteilungen und Zahlungsarten mit ihren IDs. Bitte vorher speichern.', 'tc-grubweg' ); ?></p>
+        <p><?php esc_html_e( 'Prüft die Zugangsdaten und listet Module, Mitgliedschaftsarten, Beitragsarten, Abteilungen, Personen-Attribute und Zahlungsarten mit ihren IDs. Bitte vorher speichern.', 'tc-grubweg' ); ?></p>
         <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
             <input type="hidden" name="action" value="tcg_ebusy_test">
             <?php wp_nonce_field( 'tcg_ebusy_test' ); ?>
@@ -398,7 +406,7 @@ function tcg_ebusy_render_settings_page() {
 }
 
 /**
- * Ergebnis des Verbindungstests: Module, Mitgliedschaftsarten, Zahlungsarten.
+ * Ergebnis des Verbindungstests: Module, Mitgliedschaftsarten, Beitragsarten, Abteilungen, Attribute, Zahlungsarten.
  */
 function tcg_ebusy_render_test_results( array $test, array $settings ) {
     $modules    = $test['modules'];
@@ -483,7 +491,35 @@ function tcg_ebusy_render_test_results( array $test, array $settings ) {
                     <?php endforeach; ?>
                     </tbody>
                 </table>
-                <p class="description"><?php esc_html_e( 'Die API kennt keine Liste der Beitragsarten; gezeigt werden nur die, die bereits bei einem Mitglied gesetzt sind. Weitere IDs im eBuSy-Backend nachsehen.', 'tc-grubweg' ); ?></p>
+                <p class="description"><?php esc_html_e( 'Nur zur Information: Die API kennt keine Liste der Beitragsarten; gezeigt werden die, die bereits bei einem Mitglied gesetzt sind. Zugewiesen werden sie über das Attribut „Beiträge" (Tabelle unten).', 'tc-grubweg' ); ?></p>
+            <?php endif; ?>
+
+            <h3><?php esc_html_e( 'Personen-Attribute', 'tc-grubweg' ); ?></h3>
+            <?php if ( empty( $test['attributes']['ok'] ) ) : ?>
+                <div class="notice notice-error inline"><p><?php echo esc_html( isset( $test['attributes']['error'] ) ? $test['attributes']['error'] : '' ); ?></p></div>
+            <?php else : ?>
+                <table class="widefat striped" style="max-width:720px">
+                    <thead><tr><th style="width:90px"><?php esc_html_e( 'Attribut-ID', 'tc-grubweg' ); ?></th><th><?php esc_html_e( 'Attribut', 'tc-grubweg' ); ?></th><th style="width:90px"><?php esc_html_e( 'Wert-ID', 'tc-grubweg' ); ?></th><th><?php esc_html_e( 'Wert', 'tc-grubweg' ); ?></th></tr></thead>
+                    <tbody>
+                    <?php foreach ( (array) $test['attributes']['data'] as $attribute ) :
+                        $values    = (array) ( $attribute['values'] ?? [] );
+                        $is_fee    = (int) ( $attribute['id'] ?? 0 ) === (int) $settings['fee_attribute_id'];
+                        $row_style = $is_fee ? ' style="background:#eef6e8"' : '';
+                        if ( ! $values ) {
+                            $values = [ [ 'id' => '', 'name' => __( '(Freitext)', 'tc-grubweg' ) ] ];
+                        }
+                        foreach ( $values as $i => $value ) : ?>
+                            <tr<?php echo $row_style; ?>>
+                                <td><?php if ( 0 === $i ) : ?><strong><?php echo esc_html( $attribute['id'] ?? '' ); ?></strong><?php endif; ?></td>
+                                <td><?php echo 0 === $i ? esc_html( $attribute['name'] ?? '' ) : ''; ?></td>
+                                <td><strong><?php echo esc_html( $value['id'] ?? '' ); ?></strong></td>
+                                <td><?php echo esc_html( $value['name'] ?? '' ); ?></td>
+                            </tr>
+                        <?php endforeach;
+                    endforeach; ?>
+                    </tbody>
+                </table>
+                <p class="description"><?php esc_html_e( 'Grün hinterlegt: das eingetragene Attribut „Beiträge". Die Wert-IDs gehören in die Zuordnung „Beitragsmodell → Attribut" oben.', 'tc-grubweg' ); ?></p>
             <?php endif; ?>
 
             <h3><?php esc_html_e( 'Abteilungen', 'tc-grubweg' ); ?></h3>
