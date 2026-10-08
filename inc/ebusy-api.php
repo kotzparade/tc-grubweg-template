@@ -229,12 +229,12 @@ function tcg_ebusy_update_membership( $module_id, $membership_id, array $patch )
  * Alter am 1.1. und das Personen-Attribut „Beiträge" schauen. Das Attribut ist damit der einzige
  * Weg, die Beitragsart per API zu steuern.
  *
- * @param array $attributes [ Attribut-ID => Attributwert-ID ]
+ * @param array $attributes [ Attribut-ID => Attributwert-ID, bei Freitext-Attributen der Text ]
  */
 function tcg_ebusy_set_attributes( $person_id, array $attributes ) {
     $body = [];
-    foreach ( $attributes as $attribute_id => $value_id ) {
-        $body[ (string) (int) $attribute_id ] = (string) (int) $value_id;
+    foreach ( $attributes as $attribute_id => $value ) {
+        $body[ (string) (int) $attribute_id ] = is_int( $value ) || ctype_digit( (string) $value ) ? (string) (int) $value : trim( (string) $value );
     }
     return tcg_ebusy_request( 'POST', 'general/person/' . (int) $person_id . '/set-attributes', [ 'attributes' => $body ] );
 }

@@ -194,16 +194,28 @@ function tcg_ebusy_build_person( array $data, array $settings, $mandate_referenc
         $person['contact'][ $key ] = $data['telefon'];
     }
 
+    // Optionale Schlüssel für Papieranträge (bin/ebusy-paper-application.php): quelle, antragsdatum,
+    // mandatsdatum, nationalitaet_code, bank. Der Online-Antrag setzt sie nicht.
+    $is_paper     = isset( $data['quelle'] ) && 'papier' === $data['quelle'];
+    $mandate_date = ! empty( $data['mandatsdatum'] ) ? $data['mandatsdatum'] : wp_date( 'Y-m-d' );
+
+    if ( ! empty( $data['nationalitaet_code'] ) ) {
+        $person['nationalityCode'] = $data['nationalitaet_code'];
+    }
+
     if ( '' !== $data['iban'] ) {
         $person['bankAccount'] = [
             'holder' => '' !== $data['kontoinhaber'] ? $data['kontoinhaber'] : trim( $data['vorname'] . ' ' . $data['nachname'] ),
             'number' => $data['iban'],
         ];
+        if ( ! empty( $data['bank'] ) ) {
+            $person['bankAccount']['bank'] = $data['bank'];
+        }
     }
 
     if ( $data['sepa'] ) {
         $person['sepaMandate'] = [
-            'date'      => wp_date( 'Y-m-d' ),
+            'date'      => $mandate_date,
             'reference' => $mandate_reference,
         ];
     }
@@ -217,20 +229,30 @@ function tcg_ebusy_build_person( array $data, array $settings, $mandate_referenc
     };
 
     $lines   = [];
-    $lines[] = sprintf( 'Online-Antrag vom %s über die Vereins-Website (Formular „Mitgliederantrag").', wp_date( 'd.m.Y H:i' ) );
+    $lines[] = $is_paper
+        ? sprintf( 'Papierantrag vom %1$s, erfasst am %2$s.', tcg_ebusy_format_date_de( $data['antragsdatum'] ?? '' ) ?: '–', wp_date( 'd.m.Y' ) )
+        : sprintf( 'Online-Antrag vom %s über die Vereins-Website (Formular „Mitgliederantrag").', wp_date( 'd.m.Y H:i' ) );
     $lines[] = 'Beitragsmodell: ' . ( $data['beitragsmodell'] ?: '–' );
     $lines[] = 'Gewünschter Eintritt: ' . ( $data['eintritt'] ? tcg_ebusy_format_date_de( $data['eintritt'] ) : 'schnellstmöglich' );
     if ( '' !== $data['bemerkungen'] ) {
         $lines[] = 'Bemerkungen: ' . $data['bemerkungen'];
     }
-    $lines[] = sprintf(
-        'Einwilligungen: Satzung/Beitragsordnung %s, Datenschutz %s, SEPA-Lastschrift %s%s, Fotoveröffentlichung %s',
-        $ja_nein( $data['satzung'] ),
-        $ja_nein( $data['datenschutz'] ),
-        $ja_nein( $data['sepa'] ),
-        $data['sepa'] ? ' (Mandat ' . $mandate_reference . ', erteilt am ' . wp_date( 'd.m.Y' ) . ')' : '',
-        $ja_nein( $data['foto'] )
-    );
+    if ( $is_paper ) {
+        $lines[] = sprintf(
+            'Antrag unterschrieben (Satzung/Spielordnung anerkannt); SEPA-Einzugsvollmacht %s%s',
+            $ja_nein( $data['sepa'] ),
+            $data['sepa'] ? ' (Mandat ' . $mandate_reference . ', unterschrieben am ' . tcg_ebusy_format_date_de( $mandate_date ) . ')' : ''
+        );
+    } else {
+        $lines[] = sprintf(
+            'Einwilligungen: Satzung/Beitragsordnung %s, Datenschutz %s, SEPA-Lastschrift %s%s, Fotoveröffentlichung %s',
+            $ja_nein( $data['satzung'] ),
+            $ja_nein( $data['datenschutz'] ),
+            $ja_nein( $data['sepa'] ),
+            $data['sepa'] ? ' (Mandat ' . $mandate_reference . ', erteilt am ' . wp_date( 'd.m.Y' ) . ')' : '',
+            $ja_nein( $data['foto'] )
+        );
+    }
 
     $person['comment'] = implode( "\n", $lines );
 
@@ -253,7 +275,8 @@ function tcg_ebusy_build_membership( array $data, array $settings, $person_id ) 
     $is_passive = ! empty( $settings['passive_map'][ $tier_key ] );
     $status     = 'ACTIVE' === $settings['membership_status'] ? 'ACTIVE' : 'REQUESTED';
 
-    $comment = sprintf( 'Online-Antrag: %1$s%2$s', $data['beitragsmodell'], $is_passive ? ' (passiv)' : '' );
+    $source  = ( isset( $data['quelle'] ) && 'papier' === $data['quelle'] ) ? 'Papierantrag' : 'Online-Antrag';
+    $comment = sprintf( '%1$s: %2$s%3$s', $source, $data['beitragsmodell'], $is_passive ? ' (passiv)' : '' );
     if ( '' !== $data['bemerkungen'] ) {
         $comment .= "\n" . $data['bemerkungen'];
     }
@@ -339,6 +362,18 @@ function tcg_ebusy_submit_application( array $data, array $settings, array $resu
         $result['message'] = __( 'FEHLER: eBuSy hat die Person angenommen, aber keine Personen-ID zurückgegeben – bitte in eBuSy prüfen.', 'tc-grubweg' );
         return $result;
     }
+
+    return tcg_ebusy_submit_membership_for_person( $person_id, $data, $settings, $result );
+}
+
+/**
+ * Setzt bei einer (neuen oder bereits vorhandenen) eBuSy-Person das Attribut „Beiträge" und legt
+ * die Mitgliedschaft an. Getrennt von tcg_ebusy_submit_application(), damit Papieranträge
+ * (bin/ebusy-paper-application.php) auch an eine vorhandene Person anknüpfen können.
+ */
+function tcg_ebusy_submit_membership_for_person( $person_id, array $data, array $settings, array $result ) {
+    $person_id           = (int) $person_id;
+    $result['person_id'] = $person_id;
 
     // Beitragsmodell als Attribut „Beiträge" setzen – daraus vergibt eBuSy Gruppe und Beitragsart.
     // Ein Fehler hier bricht nicht ab: Person und Mitgliedschaft werden trotzdem angelegt, der
