@@ -10,7 +10,7 @@
  * Felder: vorname, nachname, geschlecht, geburtsdatum, nationalitaet_code, telefon, email,
  * strasse, plz, ort, eltern, beruf, beitragsmodell, schluessel, interessen[], antragsdatum,
  * eintritt (optional, sonst Antragsdatum), kontoinhaber, iban, bank, unterschrift_kontoinhaber,
- * hinweise[]. Datumsangaben als TT.MM.JJJJ oder JJJJ-MM-TT.
+ * hinweise[]. Datumsangaben als TT.MM.JJJJ oder JJJJ-MM-TT. „schluessel" = Anzahl (oder true = 1).
  *
  * Ohne --live nur Dry-Run. Findet die Dublettenprüfung die Person schon in eBuSy, läuft --live
  * nur mit --person-id (Mitgliedschaft + Attribute werden dann an diese Person gehängt).
@@ -104,6 +104,22 @@ if ( '' !== trim( (string) ( $in['beruf'] ?? '' ) ) ) {
 }
 if ( ! empty( $in['interessen'] ) ) {
 	$notes[] = 'Interesse: ' . implode( ', ', (array) $in['interessen'] );
+}
+// Schlüssel: Ausgabe im Vereinsheim, 5 € je Schlüssel per Lastschrift. Attribut 9311 → Gruppe „Schlüssel"
+// → Beitragsart 3767 berechnet automatisch 5 € für einen Schlüssel; weitere Schlüssel legt der Verein von
+// Hand als Forderung an. Deshalb steht die Anzahl im Kommentar. „schluessel" darf true oder eine Zahl sein.
+if ( ! empty( $in['schluessel'] ) ) {
+	$keys = is_numeric( $in['schluessel'] ) ? max( 1, (int) $in['schluessel'] ) : 1;
+	if ( $keys > 1 ) {
+		$notes[] = sprintf(
+			'Schlüssel: %d Stück – 5 € automatisch (Beitragsart), weitere %d × 5 € = %d € als Forderung von Hand anlegen; Ausgabe im Vereinsheim',
+			$keys,
+			$keys - 1,
+			( $keys - 1 ) * 5
+		);
+	} else {
+		$notes[] = 'Schlüssel: 1 Stück (5 € automatisch per Beitragsart); Ausgabe im Vereinsheim';
+	}
 }
 foreach ( (array) ( $in['hinweise'] ?? [] ) as $hint ) {
 	$notes[] = 'Hinweis Erfassung: ' . $hint;
