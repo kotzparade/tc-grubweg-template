@@ -171,7 +171,7 @@ HTML;
         <div class="mb-info-list-item-icon">{$svg_calendar}</div>
         <div class="mb-info-list-item-text">
           <strong>Beitragsjahr = Kalenderjahr</strong>
-          <p>Der Jahresbeitrag wird zu Beginn des Kalenderjahres per SEPA-Lastschrift eingezogen. Bei Eintritt nach dem 1. Juli wird der halbe Beitrag berechnet.</p>
+          <p>Der Jahresbeitrag wird zu Beginn des Kalenderjahres per SEPA-Lastschrift eingezogen. Bei Mitgliedsanträgen ab Anfang August werden lediglich 50&nbsp;% des Jahresbeitrags fällig.</p>
         </div>
       </div>
       <div class="mb-info-list-item">
@@ -185,7 +185,7 @@ HTML;
         <div class="mb-info-list-item-icon">{$svg_doc}</div>
         <div class="mb-info-list-item-text">
           <strong>Kündigung</strong>
-          <p>Eine Kündigung ist schriftlich bis zum 31. Oktober für das folgende Vereinsjahr möglich.</p>
+          <p>Die Kündigung der Mitgliedschaft ist mit einer Frist von 1 Monat zum Jahresende möglich und hat in schriftlicher Form zu erfolgen!</p>
         </div>
       </div>
     </div>
