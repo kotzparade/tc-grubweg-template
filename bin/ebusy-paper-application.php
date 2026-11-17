@@ -4,7 +4,10 @@
  * (Person, Attribut „Beiträge", Mitgliedschaft laut Einstellung, SEPA-Mandat, Protokoll).
  *
  * Aufruf (Projektroot):
- *   php -c php.ini wp-content/themes/tc-grubweg/bin/ebusy-paper-application.php --file=import/papierantraege/x.json [--person-id=123] [--live]
+ *   php -c php.ini wp-content/themes/tc-grubweg/bin/ebusy-paper-application.php --file=import/papierantraege/x.json [--person-id=123] [--status=ACTIVE] [--live]
+ *
+ * --status überschreibt für diesen Lauf den Mitgliedschaftsstatus aus den Einstellungen
+ * (REQUESTED = Vorstand bestätigt | ACTIVE = sofort aktiv, z. B. für längst aufgenommene Mitglieder).
  *
  * Die JSON wird aus dem Foto des Antrags erstellt und vor dem Lauf von einem Menschen geprüft.
  * Felder: vorname, nachname, geschlecht, geburtsdatum, nationalitaet_code, telefon, email,
@@ -31,7 +34,7 @@ const TCG_PAPER_ATTR_ELTERN      = 9313;  // Freitext
 const TCG_PAPER_ATTR_SCHLUESSEL  = 9311;  // Wert 92962
 const TCG_PAPER_SCHLUESSEL_WERT  = 92962;
 
-$opts      = getopt( '', [ 'file:', 'person-id:', 'live' ] );
+$opts      = getopt( '', [ 'file:', 'person-id:', 'status:', 'live' ] );
 $live      = isset( $opts['live'] );
 $person_id = isset( $opts['person-id'] ) ? (int) $opts['person-id'] : 0;
 $file      = $opts['file'] ?? '';
@@ -71,6 +74,15 @@ function tcg_paper_mask_iban( $iban ) {
 
 $settings = tcg_ebusy_settings();
 $errors   = [];
+
+if ( isset( $opts['status'] ) ) {
+	$status = strtoupper( trim( $opts['status'] ) );
+	if ( in_array( $status, [ 'ACTIVE', 'REQUESTED' ], true ) ) {
+		$settings['membership_status'] = $status;
+	} else {
+		$errors[] = '--status muss ACTIVE oder REQUESTED sein: ' . $opts['status'];
+	}
+}
 $str      = fn( $k ) => trim( (string) ( $in[ $k ] ?? '' ) );
 
 $anrede = match ( tcg_paper_norm( $str( 'geschlecht' ) ) ) {
